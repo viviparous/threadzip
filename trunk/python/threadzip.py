@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # 
-# Copyright © 2009 Edward Harvey
+# Copyright 2009 Edward Harvey
 # 
 # This file is part of threadzip.
 # 
