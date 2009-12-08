@@ -1,0 +1,22 @@
+#summary How to use threadzip, and examples
+
+= How to use threadzip =
+
+threadzip.py --help<br>
+threadunzip.py --help
+
+= Examples =
+
+Suppose you have a command that generates a datastream on stdout.<br>
+`tar cf - somedir`
+
+Suppose you want to compress it very quickly.  Suppose you are on a machine with a Quad core processor, Xeon (hyperthreaded, for 8 possible threads)<br>
+`tar cf - somedir | threadzip.py -t 8 --fast > somedir.tar.tz`
+
+Suppose you want it compressed as small as possible.  (Typically 2x to 4x longer compression time, and about 2% smaller result.  Your mileage may vary, depending on the data you're compressing.)<br>
+`tar cf - somedir | threadzip.py -t 8 --best > somedir.tar.tz`
+
+Either way, you want to extract it afterward...<br>
+`cat somedir.tar.tz | threadunzip.py -t 8 | tar tf -`<br>
+or<br>
+`threadunzip.py -t 8 < somedir.tar.tz | tar tf -`<br>
