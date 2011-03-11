@@ -1,6 +1,6 @@
-#!/usr/bin/python
+#!/usr/local/bin/python2.6
 # 
-# Copyright 2009 Edward Harvey
+# Copyright 2011 Edward Harvey
 # 
 # This file is part of threadzip.
 # 
@@ -21,43 +21,82 @@
 from threading import Thread
 import sys, zlib, getopt
 
+VERSION="1.1"
+
+try:
+  import pylzma
+  pylzmaAvailable=True
+except:
+  pylzmaAvailable=False
+
 class deCompressClass(Thread):
-  def __init__ (self,data):
+  def __init__ (self,data,compresslib):
     Thread.__init__(self)
     self.data=data
     self.datadecompressed=""
+    self.compresslib=compresslib
+    self.supportedlibs=["lzma","zlib"]
+    if compresslib not in self.supportedlibs:
+      assert False, "threadunzip deCompressClass called with unsupported compresslib '"+str(compresslib)+"'"
+    if compresslib=="lzma" and not pylzmaAvailable:
+      assert False, "threadunzip deCompressClass called with lzma, but pylzma not available"
 
   def getOutput(self):
     return self.datadecompressed
 
   def run(self):
-    self.datadecompressed=zlib.decompress(self.data)
+    if self.compresslib=="lzma":
+      self.datadecompressed=pylzma.decompress(self.data)
+    elif self.compresslib=="zlib":
+      self.datadecompressed=zlib.decompress(self.data)
 
 def usage():
+  print "threadunzip version "+str(VERSION)
   print """
+
 usage: threadunzip [-htb] 
  -h --help        display this message
  -t --threads     specify the number of threads.  Suggested values are 1 to 8.  Default is 2.
 """
+
+def decode32(data):
+  # Takes the binary encoded 32-bit string representation of an integer, and returns the integer
+  # decode32('\xff\xff\xff\xff') returns 4294967295
+  return int(data.encode('hex'),16)
 
 def threadunzip(threads=2):
   decompressors=[]
 
   # First 10 bytes of any stream identify the threadzip / threadunzip version number, to accomodate for smarter packing in future.
   data=sys.stdin.read(10)
-  if not data=="%10s"%('1.0'):
+  if data=="%10s"%('1.0'):
+    compresslib="zlib"
+    streamversion="1.0"
+  elif data=="%10s"%('1.1lzma'):
+    compresslib="lzma"
+    streamversion="1.1"
+  elif data=="%10s"%('1.1zlib'):
+    compresslib="zlib"
+    streamversion="1.1"
+  else:
     sys.stderr.write("Error: this version of threadunzip doesn't recognize this data stream.\n")
     sys.exit(1)
 
   while True:
-    blocksize=sys.stdin.read(10)
-    if blocksize == "":
-      break
-    blocksize=int(blocksize)
+    if streamversion=="1.0":
+      blocksize=sys.stdin.read(10)
+      if blocksize == "":
+        break
+      blocksize=int(blocksize)
+    elif streamversion=="1.1":
+      blocksize=sys.stdin.read(4)
+      if blocksize == "":
+        break
+      blocksize=decode32(blocksize)
     data = sys.stdin.read(blocksize)
     if len(data) != blocksize:
       assert False, "data stream must be corrupt. expected "+str(blocksize)+" bytes, and got "+str(len(data))
-    present=deCompressClass(data)
+    present=deCompressClass(data,compresslib)
     decompressors.append(present)
     present.start()
     if len(decompressors)==threads:
