@@ -1,4 +1,4 @@
-#!/usr/local/bin/python2.6
+#!/usr/bin/python
 # 
 # Copyright 2011 Edward Harvey
 # 
@@ -21,7 +21,7 @@
 from threading import Thread
 import sys, zlib, getopt
 
-VERSION="1.1"
+VERSION="1.2"
 
 try:
   import pylzma
@@ -29,17 +29,25 @@ try:
 except:
   pylzmaAvailable=False
 
+try:
+  import bz2
+  bz2Available=True
+except:
+  bz2Available=False
+
 class deCompressClass(Thread):
   def __init__ (self,data,compresslib):
     Thread.__init__(self)
     self.data=data
     self.datadecompressed=""
     self.compresslib=compresslib
-    self.supportedlibs=["lzma","zlib"]
+    self.supportedlibs=["lzma","zlib","bz2","none"]
     if compresslib not in self.supportedlibs:
       assert False, "threadunzip deCompressClass called with unsupported compresslib '"+str(compresslib)+"'"
     if compresslib=="lzma" and not pylzmaAvailable:
       assert False, "threadunzip deCompressClass called with lzma, but pylzma not available"
+    if compresslib=="bz2" and not bz2Available:
+      assert False, "threadunzip deCompressClass called with bz2, but bz2 not available"
 
   def getOutput(self):
     return self.datadecompressed
@@ -49,6 +57,10 @@ class deCompressClass(Thread):
       self.datadecompressed=pylzma.decompress(self.data)
     elif self.compresslib=="zlib":
       self.datadecompressed=zlib.decompress(self.data)
+    elif self.compresslib=="bz2":
+      self.datadecompressed=bz2.decompress(self.data)
+    elif self.compresslib=="none":
+      self.datadecompressed=self.data
 
 def usage():
   print "threadunzip version "+str(VERSION)
@@ -75,9 +87,21 @@ def threadunzip(threads=2):
   elif data=="%10s"%('1.1lzma'):
     compresslib="lzma"
     streamversion="1.1"
+  elif data=="%10s"%('1.2lzma'):
+    compresslib="lzma"
+    streamversion="1.2"
   elif data=="%10s"%('1.1zlib'):
     compresslib="zlib"
     streamversion="1.1"
+  elif data=="%10s"%('1.2zlib'):
+    compresslib="zlib"
+    streamversion="1.2"
+  elif data=="%10s"%('1.2bz2'):
+    compresslib="bz2"
+    streamversion="1.2"
+  elif data=="%10s"%('1.2none'):
+    compresslib="none"
+    streamversion="1.2"
   else:
     sys.stderr.write("Error: this version of threadunzip doesn't recognize this data stream.\n")
     sys.exit(1)
@@ -88,7 +112,7 @@ def threadunzip(threads=2):
       if blocksize == "":
         break
       blocksize=int(blocksize)
-    elif streamversion=="1.1":
+    elif streamversion in ("1.1", "1.2"):
       blocksize=sys.stdin.read(4)
       if blocksize == "":
         break

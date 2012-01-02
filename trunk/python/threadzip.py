@@ -1,4 +1,4 @@
-#!/usr/local/bin/python2.6
+#!/usr/bin/python
 # 
 # Copyright 2011 Edward Harvey
 # 
@@ -21,13 +21,19 @@
 from threading import Thread
 import sys, zlib, getopt
 
-VERSION="1.1"
+VERSION="1.2"
 
 try:
   import pylzma
   pylzmaAvailable=True
 except:
   pylzmaAvailable=False
+
+try:
+  import bz2
+  bz2Available=True
+except:
+  bz2Available=False
 
 class CompressClass(Thread):
   def __init__ (self,data,compressionlevel=5,compresslib="zlib"):
@@ -37,11 +43,13 @@ class CompressClass(Thread):
     self.datacompressed=""
     self.compressionlevel=compressionlevel
     self.compresslib=compresslib
-    self.supportedlibs=["lzma","zlib"]
+    self.supportedlibs=["lzma","zlib","bz2","none"]
     if compresslib not in self.supportedlibs:
       assert False, "threadzip CompressClass called with unsupported compresslib '"+str(compresslib)+"'"
     if compresslib=="lzma" and not pylzmaAvailable:
       assert False, "threadzip CompressClass called with lzma, but pylzma not available"
+    if compresslib=="bz2" and not bz2Available:
+      assert False, "threadzip CompressClass called with bz2, but bz2 not available"
 
   def getException(self):
     return self.exception
@@ -58,6 +66,10 @@ class CompressClass(Thread):
         self.datacompressed=pylzma.compress(self.data,algorithm=self.compressionlevel)
       elif self.compresslib=="zlib":
         self.datacompressed=zlib.compress(self.data,self.compressionlevel)
+      elif self.compresslib=="bz2":
+        self.datacompressed=bz2.compress(self.data,self.compressionlevel)
+      elif self.compresslib=="none":
+        self.datacompressed=self.data
     except:
       self.exception=True
       raise
@@ -68,15 +80,15 @@ def usage():
 
 usage: threadzip [-htb] 
  -h --help        display this message
- -t --threads     specify the number of threads.  Suggested values are 1 to 8.  Default is 2.
+ -t --threads     specify the number of threads.  Default is 2.
  -b --blocksize   number of bytes to give to each thread to compress.  Default is 5M
                   could also append suffixes:
                   k  1,000
                   K  1,024
                   m  1,000,000
                   M  1,048,576
- --lzma           use lzma (like 7-zip) instead of zlib (like gzip) 
-                  Default is to use zlib for legacy reasons
+ --lzma           use lzma (like 7-zip or xz) instead of zlib (like gzip/pigz) 
+ --bz2            use bz2 (like bzip2 or pbzip2) instead of zlib (like gzip/pigz)
  -#               compressionlevel
 
                   if using zlib: integer from 1 to 9.  1 is fastest, 9 is best compression
@@ -85,8 +97,11 @@ usage: threadzip [-htb]
                   if using lzma: integer from 0 to 2.  0 is fastest, 2 is best compression
                   default is 2
 
- --fast           fastest compression. synonymous to -1 if zlib, -0 if lzma
- --best           best compression. synonymous to -9 if zlib, -2 if lzma
+                  if using bz2: integer from 1 to 9.  1 is fastest, 9 is best compression
+                  default is 9
+
+ --fast           fastest compression. synonymous to -1 if zlib, -0 if lzma, -1 if bz2
+ --best           best compression. synonymous to -9 if zlib, -2 if lzma, -9 if bz2
 """
 
 def encode32(x):
@@ -103,9 +118,13 @@ def threadzip(threads=2, blocksize=5*2**20, compressionlevel=5, compresslib="zli
 
   # First 10 bytes of any stream identify the threadzip / threadunzip version number, to accomodate for smarter packing in future.
   if compresslib=="lzma":
-    sys.stdout.write( '%10s' % ('1.1lzma') )
+    sys.stdout.write( '%10s' % ('1.2lzma') )
   elif compresslib=="zlib":
-    sys.stdout.write( '%10s' % ('1.1zlib') )
+    sys.stdout.write( '%10s' % ('1.2zlib') )
+  elif compresslib=="bz2":
+    sys.stdout.write( '%10s' % ('1.2bz2') )
+  elif compresslib=="none":
+    sys.stdout.write( '%10s' % ('1.2none') )
 
   data=""
   keepGoing=True
@@ -149,7 +168,7 @@ def main():
   compresslib="zlib"
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "ht:b:0123456789", ["help", "threads=", "blocksize=", "fast", "best", "lzma"])
+    opts, args = getopt.getopt(sys.argv[1:], "ht:b:0123456789", ["help", "threads=", "blocksize=", "fast", "best", "lzma", "bz2", "none"])
   except getopt.GetoptError, err:
     # print help information and exit:
     print str(err) # will print something like "option -a not recognized"
@@ -189,6 +208,10 @@ def main():
       best=True
     elif o in ("--lzma"):
       compresslib="lzma"
+    elif o in ("--bz2"):
+      compresslib="bz2"
+    elif o in ("--none"):
+      compresslib="none"
     else:
       assert False, "unhandled option"
 
@@ -229,16 +252,28 @@ def main():
       compressionlevel=0
     elif compresslib=="zlib":
       compressionlevel=1
+    elif compresslib=="bz2":
+      compressionlevel=1
+    elif compresslib=="none":
+      compressionlevel=1
   elif best==True:
     if compresslib=="lzma":
       compressionlevel=2
     elif compresslib=="zlib":
+      compressionlevel=9
+    elif compresslib=="bz2":
+      compressionlevel=9
+    elif compresslib=="none":
       compressionlevel=9
 
   if compressionlevel==None:
     if compresslib=="lzma":
       compressionlevel=2
     elif compresslib=="zlib":
+      compressionlevel=5
+    elif compresslib=="bz2":
+      compressionlevel=9
+    elif compresslib=="none":
       compressionlevel=5
 
   return threadzip(threads,blocksize,compressionlevel,compresslib)
